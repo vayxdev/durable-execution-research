@@ -1,0 +1,99 @@
+# Temporal「生产形态」多容器(Server 1.31,支持顶层 Workers 页 / Worker Heartbeat)。
+# auto-setup 镜像停在 1.29.6(无 ListWorkers API),故改用 server:1.31 + admin-tools:1.31 自己编排:
+#   postgres → schema-setup(建表)→ server → ns-setup(注册 default namespace) + ui
+#
+#   docker compose -f docker-compose.postgres.yml up -d
+#   docker compose -f docker-compose.postgres.yml down -v
+services:
+  postgresql:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal      # postgres 会自动建一个与 user 同名的 temporal 库
+    ports:
+      - "5432:5432"
+    volumes:
+      - temporal-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  # ① 一次性建 schema(admin-tools)。temporal 库已由 postgres 自动建,只需建 visibility 库。
+  temporal-schema-setup:
+    image: temporalio/admin-tools:1.31.0
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      SQL_PASSWORD: temporal           # temporal-sql-tool 读此环境变量
+    restart: "no"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        SQL="temporal-sql-tool --plugin postgres12 --ep postgresql -u temporal -p 5432"
+        echo '--- temporal 库(已存在,只建 schema)---'
+        $$SQL --db temporal setup-schema -v 0.0
+        $$SQL --db temporal update-schema -d /etc/temporal/schema/postgresql/v12/temporal/versioned
+        echo '--- visibility 库(建库 + schema)---'
+        $$SQL --db temporal_visibility create
+        $$SQL --db temporal_visibility setup-schema -v 0.0
+        $$SQL --db temporal_visibility update-schema -d /etc/temporal/schema/postgresql/v12/visibility/versioned
+        echo '--- schema 建好 ---'
+
+  # ② Server 1.31(用 env 生成 config 连 Postgres;不建 schema)
+  temporal:
+    image: temporalio/server:1.31.0
+    depends_on:
+      temporal-schema-setup:
+        condition: service_completed_successfully
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - DBNAME=temporal
+      - VISIBILITY_DBNAME=temporal_visibility
+      - SKIP_SCHEMA_SETUP=true
+      - BIND_ON_IP=0.0.0.0
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/docker.yaml
+    volumes:
+      - ./dynamicconfig:/etc/temporal/config/dynamicconfig   # 开启 worker heartbeat
+    ports:
+      - "7233:7233"
+
+  # ③ Server 起来后注册 default namespace。
+  #    关键:共享 temporal 容器的网络栈,连 127.0.0.1:7233(frontend 本地),
+  #    绕开 OrbStack 下「容器间连 membership 广播 IP 超时」的问题(等价于 auto-setup 在同容器内注册)。
+  temporal-ns-setup:
+    image: temporalio/admin-tools:1.31.0
+    depends_on:
+      - temporal
+    network_mode: "service:temporal"
+    restart: "no"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        until temporal operator cluster health --address 127.0.0.1:7233 2>/dev/null | grep -q SERVING; do
+          echo 'waiting for temporal server...'; sleep 2
+        done
+        temporal operator namespace describe -n default --address 127.0.0.1:7233 >/dev/null 2>&1 \
+          || temporal operator namespace create -n default --retention 24h --address 127.0.0.1:7233
+        echo 'default namespace ready'
+
+  # ④ Web UI
+  temporal-ui:
+    image: temporalio/ui:2.50.0
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:8233
+    ports:
+      - "8233:8080"
+
+volumes:
+  temporal-pgdata:

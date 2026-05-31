@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: restate-demo
+
+restate:
+  sdk:
+    http:
+      port: 9080          # 内置 endpoint 端口(等待 Restate Server 注册回连)
+  client:
+    base-uri: http://localhost:8080   # 若服务内要用 Client 调 Restate ingress 时用

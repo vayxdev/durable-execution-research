@@ -1,0 +1,4 @@
+# Temporal 动态配置。开启 Worker Heartbeat,让顶层 Workers 页(Instances)能显示 worker。
+frontend.workerHeartbeatsEnabled:
+  - value: true
+    constraints: {}

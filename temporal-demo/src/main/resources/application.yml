@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: temporal-demo
+  temporal:
+    # 连接地址:默认 127.0.0.1:7233;OrbStack 跑 auto-setup 多容器时用容器 IP
+    connection:
+      target: ${TEMPORAL_ADDRESS:127.0.0.1:7233}
+    namespace: default
+    # 自动发现:扫描该包下的 @WorkflowImpl / @ActivityImpl,注册到对应 task queue
+    workers-auto-discovery:
+      packages:
+        - study.temporal
+
+server:
+  port: 8088        # REST 端口(避开 8080=Restate ingress / 8233=Temporal UI)

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Spring Boot 应用:@Service 随应用启动自动绑定到内置 HTTP endpoint(:9080) -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>study</groupId>
+    <artifactId>restate-demo</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <java.version>17</java.version>
+        <restate.version>2.7.0</restate.version>
+    </properties>
+
+    <dependencies>
+        <!-- Restate Spring Boot starter:自动配置 endpoint(SmartLifecycle 随应用启动)、
+             收集所有 @RestateComponent bean 绑定上去、并提供 Client。
+             已传递依赖 sdk-api / client / sdk-serde-jackson / spring-boot-starter。 -->
+        <dependency>
+            <groupId>dev.restate</groupId>
+            <artifactId>sdk-spring-boot-starter</artifactId>
+            <version>${restate.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- sdk-api-gen 注解处理器仍然必须:它在编译期为 @Service/@Handler
+                         生成 ServiceDefinition 绑定代码,starter 收集 bean 后据此挂到 endpoint。 -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>dev.restate</groupId>
+                            <artifactId>sdk-api-gen</artifactId>
+                            <version>${restate.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
