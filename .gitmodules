@@ -1,0 +1,6 @@
+[submodule "restate"]
+	path = restate
+	url = git@github.com:restatedev/restate.git
+[submodule "temporal"]
+	path = temporal
+	url = git@github.com:temporalio/temporal.git
